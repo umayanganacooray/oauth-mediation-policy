@@ -1,9 +1,8 @@
 [package]
-org = "choreo"
-name = "mediation_policy"
-version = "1.0.0"
-export = ["mediation_policy"]
-distribution = "2201.3.1"
+org = "uma123"
+name = "oauth"
+version = "1.0.4"
+distribution = "2201.5.5"
 keywords = ["choreo-apim-mediation-policy","choreo-apim-mediation-request-flow","choreo-apim-mediation-response-flow","choreo-apim-mediation-fault-flow"]
 
 [build-options]

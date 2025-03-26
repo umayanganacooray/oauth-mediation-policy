@@ -5,11 +5,14 @@ import ballerina/log;
 import ballerina/lang.runtime;
 
 final TokenCacheManager tokenCacheManager = new TokenCacheManager();
-http:Client tokenClient = check new("https://example.com/token");
 
 @mediation:RequestFlow
-public function oauthIn(mediation:Context ctx, http:Request req,
-                        string tokenEndpointUrl, string clientId, string clientSecret, string headerName)
+public function oauthIn(mediation:Context ctx, 
+                        http:Request req,
+                        string tokenEndpointUrl, 
+                        string clientId, 
+                        string clientSecret, 
+                        string headerName)
                         returns http:Response|false|error? {
 
     OAuthEndpoint oauthEndpoint = {
@@ -17,13 +20,6 @@ public function oauthIn(mediation:Context ctx, http:Request req,
         clientId: clientId,
         clientSecret: clientSecret
     };
-    
-    http:Client|error tokenClientResult = new(tokenEndpointUrl);
-    if (tokenClientResult is error) {
-        log:printError("Failed to initialize token client", 'error = tokenClientResult);
-        return error("Failed to initialize token client");
-    }
-    tokenClient = tokenClientResult;
 
     TokenResponse token = check getValidToken(oauthEndpoint);
     tokenCacheManager.putToken(oauthEndpoint.clientId, token);
@@ -34,9 +30,14 @@ public function oauthIn(mediation:Context ctx, http:Request req,
 }
 
 @mediation:ResponseFlow
-public function oauthOut(mediation:Context ctx, http:Request req, http:Response response,
-                         string tokenEndpointUrl, string clientId, string clientSecret, string headerName)
-                         returns http:Response|false|error? {
+public function oauthOut(mediation:Context ctx, 
+                        http:Request req, 
+                        http:Response response,
+                        string tokenEndpointUrl, 
+                        string clientId, 
+                        string clientSecret, 
+                        string headerName)
+                        returns http:Response|false|error? {
 
     if (response.statusCode == http:STATUS_UNAUTHORIZED) {
         log:printError("Received 401 Unauthorized response");
@@ -46,9 +47,16 @@ public function oauthOut(mediation:Context ctx, http:Request req, http:Response 
 }
 
 @mediation:FaultFlow
-public function oauthFault(mediation:Context ctx, http:Request req, http:Response? res, http:Response errFlowRes, error e,
-                           string tokenEndpointUrl, string clientId, string clientSecret, string headerName)
-                           returns http:Response|false|error? {
+public function oauthFault(mediation:Context ctx, 
+                            http:Request req, 
+                            http:Response? res, 
+                            http:Response errFlowRes, 
+                            error e,
+                            string tokenEndpointUrl, 
+                            string clientId, 
+                            string clientSecret, 
+                            string headerName)
+                            returns http:Response|false|error? {
 
     log:printError("OAuth mediation fault occurred", 'error = e);
     return errFlowRes;
@@ -84,7 +92,7 @@ function generateNewToken(OAuthEndpoint endpoint) returns TokenResponse|error {
     string payload = string `grant_type=client_credentials&client_id=${endpoint.clientId}&client_secret=${endpoint.clientSecret}`;
     tokenReq.setTextPayload(payload);
     
-    TokenResponse token = check requestAndParseToken(tokenReq);
+    TokenResponse token = check requestAndParseToken(tokenReq,endpoint.tokenApiUrl);
     return token;
 }
 
@@ -99,12 +107,18 @@ function refreshToken(OAuthEndpoint endpoint, string refreshToken) returns Token
     string payload = string `grant_type=refresh_token&refresh_token=${refreshToken}&client_id=${endpoint.clientId}&client_secret=${endpoint.clientSecret}`;
     tokenReq.setTextPayload(payload);
     
-    TokenResponse token = check requestAndParseToken(tokenReq);
+    TokenResponse token = check requestAndParseToken(tokenReq,endpoint.tokenApiUrl);
     return token;
 }
 
-function requestAndParseToken(http:Request tokenReq) returns TokenResponse|error {
-
+function requestAndParseToken(http:Request tokenReq, string tokenEndpointUrl) returns TokenResponse|error {
+    http:Client|error tokenClientResult = new(tokenEndpointUrl);
+    if (tokenClientResult is error) {
+        log:printError("Failed to initialize token client", 'error = tokenClientResult);
+        return error("Failed to initialize token client");
+    }
+    http:Client tokenClient = tokenClientResult;
+    
     int maxRetries = 3;
     int retryCount = 0;
     decimal initialBackoff = 5; 
@@ -138,11 +152,11 @@ function requestAndParseToken(http:Request tokenReq) returns TokenResponse|error
             }
         }
     }
-    
+
     if tokenResp is () {
         return error("Failed to get token response after retries", lastError);
     }
-    
+
     json|error respJson = tokenResp.getJsonPayload();
     if (respJson is error) {
         return error("Failed to parse token response: " + respJson.message());

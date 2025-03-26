@@ -8,7 +8,7 @@ public class TokenCacheManager {
         self.tokenCache = new (capacity = 100, evictionFactor = 0.2);
     }
 
-     public function getToken(string id) returns TokenResponse? {
+    public function getToken(string id) returns TokenResponse? {
         any|error cachedItem = self.tokenCache.get(id);
         if (cachedItem is error) {
             log:printDebug("No token in cache for ID: " + id);
@@ -28,6 +28,13 @@ public class TokenCacheManager {
         error? result = self.tokenCache.invalidate(id);
         if (result is error) {
             log:printError("Failed to remove token from cache", 'error = result);
+        }
+    }
+
+    public function clearCache() {
+        error? result = self.tokenCache.invalidateAll();
+        if (result is error) {
+            log:printError("Failed to clear token cache", 'error = result);
         }
     }
 }

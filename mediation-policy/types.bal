@@ -1,4 +1,4 @@
-type OAuthEndpoint record {|
+public type OAuthEndpoint record {|
     string tokenApiUrl;
     string clientId;
     string clientSecret;

@@ -1,9 +1,10 @@
 [package]
-org = "uma123"
+org = "umayanganaorg"
 name = "oauth"
-version = "1.0.4"
+version = "1.0.15"
 distribution = "2201.5.5"
 keywords = ["choreo-apim-mediation-policy","choreo-apim-mediation-request-flow","choreo-apim-mediation-response-flow","choreo-apim-mediation-fault-flow"]
 
 [build-options]
-observabilityIncluded = true
+observabilityIncluded = false
+sticky=false

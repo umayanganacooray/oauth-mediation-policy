@@ -20,11 +20,11 @@ public function oauthIn(mediation:Context ctx,
         clientId: clientId,
         clientSecret: clientSecret
     };
-
+    
     TokenResponse token = check getValidToken(oauthEndpoint);
     tokenCacheManager.putToken(oauthEndpoint.clientId, token);
-    string authorizationHeader = headerName == "Authorization" ? "Bearer " + token.accessToken : token.accessToken;
-    req.setHeader(headerName, authorizationHeader);
+    string headerValue = headerName == "Authorization" ? "Bearer " + token.accessToken : token.accessToken;
+    req.setHeader(headerName, headerValue);
     
     return;
 }
@@ -72,13 +72,14 @@ function getValidToken(OAuthEndpoint oauthEndpoint) returns TokenResponse|error 
         if (cachedToken.validTill - currentTimeInSeconds > tokenExpiryBuffer) {
             return cachedToken;
         }
-
-        if (cachedToken.refreshToken is string) {
+        else if (cachedToken.refreshToken is string && cachedToken.refreshToken !="") {
             TokenResponse|error refreshResult = refreshToken(oauthEndpoint, <string>cachedToken.refreshToken);
             if (refreshResult is TokenResponse) {
                 return refreshResult;
             }
             log:printError("Token refresh failed. Generating a new token.", 'error = refreshResult);
+        }else{
+            return generateNewToken(oauthEndpoint);
         }
     }
     
@@ -92,7 +93,7 @@ function generateNewToken(OAuthEndpoint endpoint) returns TokenResponse|error {
     string payload = string `grant_type=client_credentials&client_id=${endpoint.clientId}&client_secret=${endpoint.clientSecret}`;
     tokenReq.setTextPayload(payload);
     
-    TokenResponse token = check requestAndParseToken(tokenReq,endpoint.tokenApiUrl);
+    TokenResponse token = check requestAndParseToken(tokenReq, endpoint.tokenApiUrl);
     return token;
 }
 
@@ -107,7 +108,7 @@ function refreshToken(OAuthEndpoint endpoint, string refreshToken) returns Token
     string payload = string `grant_type=refresh_token&refresh_token=${refreshToken}&client_id=${endpoint.clientId}&client_secret=${endpoint.clientSecret}`;
     tokenReq.setTextPayload(payload);
     
-    TokenResponse token = check requestAndParseToken(tokenReq,endpoint.tokenApiUrl);
+    TokenResponse token = check requestAndParseToken(tokenReq, endpoint.tokenApiUrl);
     return token;
 }
 
@@ -117,38 +118,35 @@ function requestAndParseToken(http:Request tokenReq, string tokenEndpointUrl) re
         log:printError("Failed to initialize token client", 'error = tokenClientResult);
         return error("Failed to initialize token client");
     }
-    http:Client tokenClient = tokenClientResult;
-    
+
     int maxRetries = 3;
     int retryCount = 0;
     decimal initialBackoff = 5; 
-    
     http:Response? tokenResp = ();
     error? lastError = ();
    
     while retryCount < maxRetries {
-        http:Response|error tokenRespResult = tokenClient->post("", tokenReq);
+        http:Response|http:ClientError tokenRespResult = tokenClientResult->post("", tokenReq);
         
         if tokenRespResult is http:Response {
             tokenResp = tokenRespResult;
             break;
         } else {
-            string errorMsg = tokenRespResult.message();
-            if errorMsg.includes("timed out") || errorMsg.includes("Connection refused") {
+            if(tokenRespResult is http:IdleTimeoutError){
                 lastError = tokenRespResult;
                 retryCount += 1;
                 
                 if retryCount < maxRetries {
                     decimal backoffTime = initialBackoff * (2 ^ retryCount);
-                    log:printWarn(string `Token request failed (${errorMsg}). Retrying (${retryCount}/${maxRetries}) after ${backoffTime}s`);
-                    
+                    log:printWarn(string `Token request failed (${tokenRespResult.message()}). Retrying ${retryCount} after ${backoffTime}s`);
                     runtime:sleep(backoffTime);
                 } else {
-                    log:printError(string `Maximum retries (${maxRetries}) exceeded for token request`);
-                    return error("Error calling token endpoint after maximum retries: " + errorMsg);
+                    log:printError(string `Maximum retries (${maxRetries}) exceeded for token request`+ tokenRespResult.message());
+                    return error("Error calling token endpoint after maximum retries");
                 }
             } else {
-                return error("Error calling token endpoint: " + errorMsg);
+                log:printError("Unexpected error calling token endpoint: " + tokenRespResult.message());
+                return error("Unexpected error calling token endpoint");
             }
         }
     }
@@ -171,11 +169,12 @@ function requestAndParseToken(http:Request tokenReq, string tokenEndpointUrl) re
         expiresIn: expiresIn,
         validTill: currentTime + expiresIn
     };
-
-    if (respJson.refresh_token is string && respJson.refresh_token != "") {
-        token.refreshToken = check respJson.refresh_token;
+    
+    json|error refreshTokenJson = respJson.refresh_token;
+    if (refreshTokenJson is string && refreshTokenJson.length() > 0) {
+        token.refreshToken = refreshTokenJson;
     } else {
-        log:printDebug("No refresh_token in response");
+        log:printDebug("No valid refresh_token in response");
     }
 
     return token;

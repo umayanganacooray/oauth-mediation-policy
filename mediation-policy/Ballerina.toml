@@ -3,7 +3,7 @@ org = "umayanganaorg"
 name = "oauth"
 version = "1.0.15"
 distribution = "2201.5.5"
-keywords = ["choreo-apim-mediation-policy","choreo-apim-mediation-request-flow","choreo-apim-mediation-response-flow","choreo-apim-mediation-fault-flow"]
+keywords = ["choreo-apim-mediation-policy","choreo-apim-mediation-request-flow"]
 
 [build-options]
 observabilityIncluded = false

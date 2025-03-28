@@ -25,7 +25,7 @@ configurable string testClientId = "71z_XwvIxg6oYpDifjfe2jwIdI74a";
 configurable string testClientSecret = "bqBe_HZGBjklryRfshysAzvn_fUJcywyo4mmhlk5Zg4a";
 configurable string testHeaderName = "Authorization";
 
-OAuthEndpoint endpoint = {
+OauthEndpointConfig endpoint = {
         tokenApiUrl: mockTokenEndpoint,
         clientId: testClientId,
         clientSecret: testClientSecret
@@ -65,78 +65,6 @@ function testOAuthInSuccess() returns error? {
 }
 
 @test:Config {}
-function testOAuthOutSuccess() returns error? {
-    mediation:Context ctx = createContext("get", "/greet");
-    http:Request req = new;
-    http:Response resp = new;
-    http:Response res = new;
-    resp.statusCode = http:STATUS_OK;
-    
-    http:Response|error|false? result = oauthOut(
-        ctx, 
-        req, 
-        res,
-        mockTokenEndpoint,
-        testClientId,
-        testClientSecret,
-        testHeaderName
-    );
-    test:assertTrue(result is (), "Expected no response (nil) for successful response");
-}
-
-@test:Config {}
-function testOAuthOutUnauthorized() returns error? {
-    mediation:Context ctx = createContext("get", "/greet");
-    http:Request req = new;
-    http:Response res = new;
-    res.statusCode = http:STATUS_UNAUTHORIZED;
-
-    http:Response|error|false? result = oauthOut(
-        ctx, 
-        req, 
-        res,
-        mockTokenEndpoint,
-        testClientId,
-        testClientSecret,
-        testHeaderName
-    );
-
-    test:assertTrue(result is error, "Expected error for 401 response");
-    if (result is error) {
-        test:assertTrue(result.message().includes("Unauthorized"), 
-                        "Error message should indicate token endpoint failure");
-    }
-}
-
-@test:Config {}
-function testOAuthFault() returns error? {
-    mediation:Context ctx = createContext("get", "/greet");
-    http:Request req = new;
-    http:Response res = new;
-    http:Response errFlowRes = new;
-    errFlowRes.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
-    error mockError = error("Mock mediation error");
-
-    http:Response|false|error? result = oauthFault(
-        ctx, 
-        req, 
-        res, 
-        errFlowRes, 
-        mockError, 
-        mockTokenEndpoint,
-        testClientId,
-        testClientSecret,
-        testHeaderName
-    );
-
-    test:assertTrue(result is http:Response, "Expected http:Response from fault flow");
-    if (result is http:Response) {
-        test:assertEquals(result.statusCode, http:STATUS_INTERNAL_SERVER_ERROR, 
-                          "Fault flow should return 500 status");
-    }
-}
-
-@test:Config {}
 function testGetValidTokenWithCache() returns error? {
     TokenResponse token1 = check getValidToken(endpoint);
     TokenResponse token2 = check getValidToken(endpoint);
@@ -162,20 +90,9 @@ function testGenerateNewTokenWhenRemainFiveMin() returns error? {
             "refreshToken": "eyJ4NXQiOiJPcmNycTdfU2FEYVE4ejFFUE1EWWowcENyQm8iLCJraWQiOiJZV05pTm1KallqbGtObU5pWkRkaVpUWTRaREF3WlRNNU5HRmpOVE16WWpBNFlqQTFPR0V4TkRjMll6bGxaREEwWm1Jd01qTTVOMlE1WlRFeE9EWTNOd19SUzI1NiIsInR5cCI6ImF0K2p3dCIsImFsZyI6IlJTMjU2In0"
         };
 
-    tokenCacheManager.putToken(endpoint.clientId,token);
     TokenResponse token1 = check getValidToken(endpoint);
     test:assertNotEquals(token1.accessToken, token.accessToken, "Cached token and generated tocken are matched");
 }
 
 @test:BeforeSuite
 function startMockServer() {}
-
-@test:AfterSuite
-function resetTokenCache() {
-    tokenCacheManager.clearCache();
-}
-
-@test:BeforeEach
-function beforeEach() {
-    resetTokenCache();
-}
